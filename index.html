@@ -1,0 +1,1105 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>棚卸アプリ</title>
+  <link href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@400;500;700&display=swap" rel="stylesheet">
+  <!-- jsQR：カメラ映像からQRコードをリアルタイム解析 -->
+  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+  <style>
+    /* ===== リセット & ベース ===== */
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    :root {
+      --bg:           #f0f4fb;
+      --surface:      #ffffff;
+      --surface2:     #e8eef8;
+      --blue:         #2e6be0;
+      --blue-dk:      #1a4db0;
+      --blue-lt:      #c8d8f8;
+      --blue-mid:     #5b8aea;
+      --header-from:  #1a3fa0;
+      --header-to:    #0d2870;
+      --btn-reg-from: #1877f0;
+      --btn-reg-to:   #0d58c0;
+      --btn-re-from:  #1aa8c8;
+      --btn-re-to:    #0d78a0;
+      --btn-cam-from: #2e8b57;
+      --btn-cam-to:   #1a5c38;
+      --cyan:         #40a8c8;
+      --cyan-dk:      #286a90;
+      --cyan-lt:      #ecf8fd;
+      --filled:       #1860c0;
+      --filled-lt:    #d0e4ff;
+      --error:        #d63030;
+      --error-lt:     #ffe0e0;
+      --text:         #0e1e3a;
+      --text-mid:     #3a5a8a;
+      --shadow-sm:    0 3px 12px rgba(20,50,120,0.10);
+      --radius:       20px;
+      --radius-sm:    14px;
+      --radius-xs:    10px;
+      --font:         'Zen Maru Gothic', 'Hiragino Maru Gothic ProN', sans-serif;
+    }
+
+    html, body {
+      min-height: 100%;
+      background: var(--bg);
+      font-family: var(--font);
+      color: var(--text);
+      font-size: 17px;
+    }
+
+    .app-wrapper {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      max-width: 520px;
+      margin: 0 auto;
+      padding: 0 0 60px;
+    }
+
+    /* ===== ヘッダー ===== */
+    .app-header {
+      background: linear-gradient(135deg, var(--header-from) 0%, var(--header-to) 100%);
+      color: #fff;
+      padding: 22px 20px 18px;
+      border-radius: 0 0 var(--radius) var(--radius);
+      box-shadow: 0 6px 28px rgba(10,30,100,0.35);
+      text-align: center;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+
+    .app-header h1 {
+      font-size: 26px;
+      font-weight: 700;
+      letter-spacing: 0.10em;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      text-shadow: 0 2px 6px rgba(0,0,0,0.25);
+    }
+
+    .app-header .subtitle {
+      font-size: 15px;
+      opacity: 0.92;
+      margin-top: 6px;
+      letter-spacing: 0.04em;
+      font-weight: 600;
+    }
+
+    /* ===== カード共通 ===== */
+    .card {
+      background: var(--surface);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow-sm);
+      padding: 20px;
+      margin: 14px 14px 0;
+      border: 2px solid var(--blue-lt);
+      animation: fadeUp 0.3s ease both;
+    }
+
+    .card-label {
+      font-size: 16px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      color: var(--blue-dk);
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .card-label::before {
+      content: '';
+      display: inline-block;
+      width: 6px;
+      height: 20px;
+      background: linear-gradient(180deg, var(--blue), var(--cyan));
+      border-radius: 3px;
+    }
+
+    /* ===== QRスキャンカード ===== */
+    .qr-card {
+      background: linear-gradient(145deg, #f4f7fd, #e4ecfc);
+      border: 2px solid var(--blue-mid);
+      padding: 18px 18px 16px;
+    }
+
+    /* モード切替タブ */
+    .scan-mode-tabs {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+
+    .scan-tab {
+      flex: 1;
+      font-family: var(--font);
+      font-size: 14px;
+      font-weight: 700;
+      padding: 10px 6px;
+      border: 2px solid var(--blue-lt);
+      border-radius: var(--radius-xs);
+      background: var(--surface2);
+      color: var(--text-mid);
+      cursor: pointer;
+      text-align: center;
+      transition: all 0.18s;
+      letter-spacing: 0.04em;
+      -webkit-appearance: none;
+    }
+
+    .scan-tab.active {
+      background: linear-gradient(135deg, var(--blue), var(--blue-dk));
+      color: #fff;
+      border-color: var(--blue-dk);
+      box-shadow: 0 3px 12px rgba(30,80,200,0.3);
+    }
+
+    /* 正方形スキャンエリア */
+    .qr-square {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 1 / 1;
+      background: rgba(255,255,255,0.92);
+      border: 2.5px solid var(--blue-lt);
+      border-radius: var(--radius-sm);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    .qr-square.camera-on {
+      border-color: #2e8b57;
+      box-shadow: 0 0 0 4px rgba(46,139,87,0.22);
+    }
+
+    /* カメラ映像 */
+    #cameraVideo {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      border-radius: calc(var(--radius-sm) - 3px);
+      display: none;
+    }
+
+    /* スキャン成功フラッシュ */
+    #scanFlash {
+      position: absolute;
+      inset: 0;
+      background: rgba(46,107,224,0.5);
+      border-radius: calc(var(--radius-sm) - 3px);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.08s;
+      z-index: 3;
+    }
+
+    /* 走査ライン */
+    #scanLine {
+      display: none;
+      position: absolute;
+      left: 0; right: 0;
+      height: 4px;
+      background: linear-gradient(90deg,
+        transparent 0%,
+        var(--btn-re-from) 30%,
+        var(--blue) 50%,
+        var(--btn-re-from) 70%,
+        transparent 100%);
+      box-shadow: 0 0 14px rgba(26,168,200,0.9);
+      border-radius: 2px;
+      z-index: 4;
+      animation: scanline-move 2s linear infinite;
+    }
+
+    @keyframes scanline-move {
+      0%   { top: 5%; }
+      100% { top: 93%; }
+    }
+
+    /* 四隅マーカー */
+    .qr-corner {
+      position: absolute;
+      width: 30px;
+      height: 30px;
+      border-color: var(--blue);
+      border-style: solid;
+      border-width: 0;
+      z-index: 5;
+      transition: border-color 0.2s;
+    }
+    .qr-corner.tl { top:10px;    left:10px;   border-top-width:4px;    border-left-width:4px;   border-radius:6px 0 0 0; }
+    .qr-corner.tr { top:10px;    right:10px;  border-top-width:4px;    border-right-width:4px;  border-radius:0 6px 0 0; }
+    .qr-corner.bl { bottom:10px; left:10px;   border-bottom-width:4px; border-left-width:4px;   border-radius:0 0 0 6px; }
+    .qr-corner.br { bottom:10px; right:10px;  border-bottom-width:4px; border-right-width:4px;  border-radius:0 0 6px 0; }
+    .qr-square.camera-on .qr-corner { border-color: #2e8b57; }
+    .qr-square.camera-on .qr-icon  { display: none; }
+
+    .qr-icon {
+      font-size: 52px;
+      line-height: 1;
+      opacity: 0.18;
+      user-select: none;
+      pointer-events: none;
+      position: absolute;
+      z-index: 1;
+    }
+
+    .qr-label {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--text-mid);
+      text-align: center;
+      padding: 0 24px;
+      position: relative;
+      z-index: 6;
+    }
+
+    .qr-square.camera-on .qr-label {
+      color: #fff;
+      text-shadow: 0 1px 4px rgba(0,0,0,0.7);
+      background: rgba(0,0,0,0.40);
+      border-radius: 8px;
+      padding: 6px 16px;
+    }
+
+    /* jsQR解析用 非表示キャンバス */
+    #qrCanvas { display: none; }
+
+    /* カメラ起動ボタン */
+    #btnCameraStart {
+      margin-top: 12px;
+      width: 100%;
+      font-family: var(--font);
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      border: none;
+      border-radius: var(--radius-sm);
+      padding: 17px 12px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      color: #fff;
+      background: linear-gradient(135deg, var(--btn-cam-from) 0%, var(--btn-cam-to) 100%);
+      box-shadow: 0 4px 16px rgba(30,100,60,0.4);
+      transition: transform 0.12s, opacity 0.2s;
+      -webkit-appearance: none;
+    }
+    #btnCameraStart:active { transform: scale(0.96); }
+
+    /* カメラ停止ボタン */
+    #btnCameraStop {
+      margin-top: 12px;
+      width: 100%;
+      font-family: var(--font);
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      border: none;
+      border-radius: var(--radius-sm);
+      padding: 17px 12px;
+      cursor: pointer;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      color: #fff;
+      background: linear-gradient(135deg, #c0392b 0%, #8e1a10 100%);
+      box-shadow: 0 4px 16px rgba(180,40,30,0.4);
+      transition: transform 0.12s, opacity 0.2s;
+      -webkit-appearance: none;
+    }
+    #btnCameraStop:active { transform: scale(0.96); }
+
+    /* USBモード用非表示入力欄 */
+    #barcodeInput {
+      position: absolute;
+      opacity: 0;
+      width: 1px;
+      height: 1px;
+      pointer-events: none;
+    }
+
+    /* ヒントテキスト */
+    .scan-hint {
+      text-align: center;
+      font-size: 14px;
+      color: var(--text-mid);
+      margin-top: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      font-weight: 500;
+    }
+
+    /* ===== 登録情報エリア ===== */
+    .info-row {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+
+    .info-field { flex: 1; }
+
+    .field-label {
+      font-size: 15px;
+      color: var(--blue-dk);
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      margin-bottom: 6px;
+      display: block;
+    }
+
+    .field-value {
+      background: var(--surface2);
+      border: 2px solid var(--blue-lt);
+      border-radius: var(--radius-xs);
+      padding: 12px 14px;
+      font-size: 17px;
+      color: var(--text);
+      min-height: 50px;
+      display: flex;
+      align-items: center;
+      word-break: break-all;
+      font-weight: 500;
+    }
+
+    .field-value.filled {
+      background: var(--filled-lt);
+      border-color: var(--filled);
+      color: var(--filled);
+      font-weight: 700;
+    }
+
+    .field-value.unmatch {
+      background: var(--error-lt);
+      border-color: var(--error);
+      color: var(--error);
+    }
+
+    /* 数量入力 */
+    #quantityInput {
+      width: 100%;
+      font-family: var(--font);
+      font-size: 36px;
+      font-weight: 700;
+      color: #0a2050;
+      background: var(--cyan-lt);
+      border: 3px solid var(--cyan);
+      border-radius: var(--radius-xs);
+      padding: 12px 14px;
+      text-align: center;
+      outline: none;
+      -webkit-appearance: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    #quantityInput:focus {
+      border-color: var(--cyan-dk);
+      box-shadow: 0 0 0 4px rgba(64,168,200,0.25);
+    }
+
+    /* セレクト */
+    select {
+      width: 100%;
+      font-family: var(--font);
+      font-size: 17px;
+      color: var(--text);
+      background: var(--surface);
+      border: 2px solid var(--blue-lt);
+      border-radius: var(--radius-xs);
+      padding: 14px 44px 14px 14px;
+      outline: none;
+      -webkit-appearance: none;
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='9' viewBox='0 0 14 9'%3E%3Cpath d='M1 1l6 6 6-6' stroke='%232e6be0' stroke-width='2.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 14px center;
+      cursor: pointer;
+      font-weight: 500;
+    }
+
+    select:focus {
+      border-color: var(--blue);
+      box-shadow: 0 0 0 4px rgba(46,107,224,0.15);
+    }
+
+    /* ===== ボタン行 ===== */
+    .btn-row {
+      display: flex;
+      gap: 12px;
+      margin: 16px 14px 0;
+    }
+
+    .btn {
+      flex: 1;
+      font-family: var(--font);
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      border: none;
+      border-radius: var(--radius);
+      padding: 20px 12px;
+      cursor: pointer;
+      transition: transform 0.12s, box-shadow 0.2s, opacity 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      -webkit-appearance: none;
+      color: #fff;
+      text-shadow: 0 1px 3px rgba(0,0,0,0.20);
+    }
+
+    .btn:active { transform: scale(0.95); }
+
+    .btn-register {
+      background: linear-gradient(135deg, var(--btn-reg-from) 0%, var(--btn-reg-to) 100%);
+      box-shadow: 0 5px 20px rgba(20,80,200,0.45);
+      flex: 2;
+    }
+
+    .btn-register:disabled {
+      opacity: 0.38;
+      box-shadow: none;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .btn-rescan {
+      background: linear-gradient(135deg, var(--btn-re-from) 0%, var(--btn-re-to) 100%);
+      box-shadow: 0 5px 18px rgba(20,120,160,0.40);
+    }
+
+    /* ===== トースト ===== */
+    #toast {
+      position: fixed;
+      bottom: 28px;
+      left: 50%;
+      transform: translateX(-50%) translateY(80px);
+      color: #fff;
+      padding: 14px 24px;
+      border-radius: var(--radius);
+      font-size: 17px;
+      font-weight: 700;
+      max-width: 360px;
+      width: calc(100% - 36px);
+      text-align: center;
+      box-shadow: 0 6px 28px rgba(0,0,0,0.28);
+      z-index: 100;
+      transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.3s;
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    #toast.show    { transform: translateX(-50%) translateY(0); opacity: 1; }
+    #toast.success { background: linear-gradient(135deg, var(--btn-reg-from), var(--btn-reg-to)); }
+    #toast.updated { background: linear-gradient(135deg, var(--cyan), var(--cyan-dk)); }
+    #toast.error   { background: linear-gradient(135deg, var(--error), #a01010); }
+
+    /* ===== ローディング ===== */
+    #loading {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(240,244,251,0.82);
+      z-index: 200;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 14px;
+      backdrop-filter: blur(4px);
+    }
+
+    #loading.show { display: flex; }
+
+    .spinner {
+      width: 52px;
+      height: 52px;
+      border: 5px solid var(--blue-lt);
+      border-top-color: var(--blue);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .loading-text {
+      font-size: 17px;
+      color: var(--blue-dk);
+      font-weight: 700;
+    }
+
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(10px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    ::-webkit-scrollbar { display: none; }
+  </style>
+</head>
+<body>
+
+<div class="app-wrapper">
+
+  <!-- ヘッダー -->
+  <header class="app-header">
+    <h1>📦 棚 卸 ア プ リ</h1>
+    <div class="subtitle" id="currentDate">読込中...</div>
+  </header>
+
+  <!-- QRコード読取エリア -->
+  <div class="card qr-card" id="barcodeCard">
+    <div class="card-label">QRコード読取</div>
+
+    <!-- モード切替タブ -->
+    <div class="scan-mode-tabs">
+      <button class="scan-tab active" id="tabCamera" onclick="switchMode('camera')">📷 カメラ</button>
+      <button class="scan-tab"        id="tabUsb"    onclick="switchMode('usb')">🔌 USBスキャナ</button>
+    </div>
+
+    <!-- 正方形スキャンエリア -->
+    <div class="qr-square" id="qrSquare">
+      <div class="qr-corner tl"></div>
+      <div class="qr-corner tr"></div>
+      <div class="qr-corner bl"></div>
+      <div class="qr-corner br"></div>
+      <video id="cameraVideo" playsinline autoplay muted></video>
+      <div id="scanLine"></div>
+      <div id="scanFlash"></div>
+      <div class="qr-icon" id="qrIcon">⬛</div>
+      <div class="qr-label" id="qrLabel">📷 下のボタンでカメラを起動</div>
+    </div>
+
+    <!-- jsQR解析用 非表示キャンバス -->
+    <canvas id="qrCanvas"></canvas>
+
+    <!-- カメラ起動ボタン -->
+    <button id="btnCameraStart" onclick="startCamera()">
+      📷 カメラを起動してスキャン
+    </button>
+
+    <!-- カメラ停止ボタン -->
+    <button id="btnCameraStop" onclick="stopCamera()">
+      ⏹ カメラを停止
+    </button>
+
+    <!-- USB用 非表示入力 -->
+    <input
+      type="text"
+      id="barcodeInput"
+      autocomplete="off"
+      autocorrect="off"
+      autocapitalize="none"
+      spellcheck="false"
+      inputmode="none"
+      tabindex="-1"
+      aria-hidden="true"
+    >
+
+    <div class="scan-hint" id="scanHint">📷 カメラボタンをタップしてスキャン開始</div>
+  </div>
+
+  <!-- 登録情報エリア -->
+  <div class="card" id="infoCard">
+    <div class="card-label">登録情報</div>
+
+    <div style="margin-bottom:10px;">
+      <span class="field-label">図番</span>
+      <div class="field-value" id="zunoDisplay">―</div>
+    </div>
+
+    <div class="info-row">
+      <div class="info-field">
+        <span class="field-label">品名</span>
+        <div class="field-value" id="hinmeiDisplay">―</div>
+      </div>
+      <div class="info-field">
+        <span class="field-label">サイズ</span>
+        <div class="field-value" id="sizeDisplay">―</div>
+      </div>
+    </div>
+
+    <div style="margin-bottom:10px;">
+      <span class="field-label">数量</span>
+      <input type="number" id="quantityInput" placeholder="0" min="0" step="1" inputmode="numeric">
+    </div>
+
+    <div style="margin-bottom:10px;">
+      <span class="field-label">棚卸部署</span>
+      <select id="departmentSelect">
+        <option value="">― 選択してください ―</option>
+      </select>
+    </div>
+
+    <div style="margin-bottom:10px;">
+      <span class="field-label">担当者</span>
+      <select id="personnelSelect">
+        <option value="">― 選択してください ―</option>
+      </select>
+    </div>
+
+    <div>
+      <span class="field-label">在庫区分</span>
+      <select id="inventoryTypeSelect">
+        <option value="">― 選択してください ―</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- ボタン行 -->
+  <div class="btn-row">
+    <button class="btn btn-rescan" onclick="resetAll()">🔄 再スキャン</button>
+    <button class="btn btn-register" id="registerBtn" onclick="registerData()" disabled>✅ 登録</button>
+  </div>
+
+</div>
+
+<!-- ローディング -->
+<div id="loading">
+  <div class="spinner"></div>
+  <div class="loading-text">処理中...</div>
+</div>
+
+<!-- トースト -->
+<div id="toast"></div>
+
+<script>
+  // ============================================================
+  // ★★★ 設定エリア（ここだけ変更すればOK） ★★★
+  // GASデプロイ後のURLを貼り付けてください
+  // ============================================================
+  var GAS_URL = 'https://script.google.com/macros/s/★ここにGASのデプロイURLを貼り付け★/exec';
+  // ============================================================
+
+  var currentMode  = 'camera';
+  var isScanning   = false;
+  var cameraStream = null;
+  var rafId        = null;
+  var cameraActive = false;
+
+  // ============================================================
+  // 初期化
+  // ============================================================
+  window.addEventListener('load', function () {
+    updateDateTime();
+    setInterval(updateDateTime, 1000);
+    loadMasterData();   // 部署・担当者・在庫区分を一括取得
+    setupUsbInput();
+    switchMode('camera');
+  });
+
+  // ============================================================
+  // 日時表示
+  // ============================================================
+  function updateDateTime() {
+    var now = new Date();
+    var pad = function (n) { return String(n).padStart(2, '0'); };
+    document.getElementById('currentDate').textContent =
+      now.getFullYear() + '/' + pad(now.getMonth() + 1) + '/' + pad(now.getDate()) +
+      '  ' + pad(now.getHours()) + ':' + pad(now.getMinutes()) + ':' + pad(now.getSeconds());
+  }
+
+  // ============================================================
+  // GAS API 呼び出し共通関数
+  //   action : 'getMaster' | 'lookup' | 'register'
+  //   params : オブジェクト（GETはクエリ、POSTはJSONボディ）
+  // ============================================================
+  function callGAS(action, params) {
+    return new Promise(function (resolve, reject) {
+      var isGet = (action === 'getMaster' || action === 'lookup');
+
+      if (isGet) {
+        // GET リクエスト
+        var qs = 'action=' + encodeURIComponent(action);
+        Object.keys(params || {}).forEach(function (k) {
+          qs += '&' + encodeURIComponent(k) + '=' + encodeURIComponent(params[k]);
+        });
+        fetch(GAS_URL + '?' + qs, { method: 'GET' })
+          .then(function (r) { return r.json(); })
+          .then(resolve)
+          .catch(reject);
+      } else {
+        // POST リクエスト
+        var body = Object.assign({ action: action }, params || {});
+        fetch(GAS_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain' },
+          // GASはContent-Type:application/jsonをCORSプリフライトなしで受けられないため
+          // text/plainでJSONを送り、GAS側でJSON.parseする
+          body: JSON.stringify(body)
+        })
+          .then(function (r) { return r.json(); })
+          .then(resolve)
+          .catch(reject);
+      }
+    });
+  }
+
+  // ============================================================
+  // マスタデータ一括取得（部署・担当者・在庫区分）
+  // ============================================================
+  function loadMasterData() {
+    callGAS('getMaster', {})
+      .then(function (data) {
+        fillSelect('departmentSelect',   data.departments   || []);
+        fillSelect('personnelSelect',    data.personnel     || []);
+        fillSelect('inventoryTypeSelect',data.inventoryTypes|| []);
+      })
+      .catch(function () {
+        showToast('⚠️ マスタデータ取得失敗。URLを確認してください', 'error');
+      });
+  }
+
+  function fillSelect(id, items) {
+    var sel = document.getElementById(id);
+    items.forEach(function (d) {
+      var opt = document.createElement('option');
+      opt.value = d;
+      opt.textContent = d;
+      sel.appendChild(opt);
+    });
+  }
+
+  // ============================================================
+  // モード切替（カメラ / USB）
+  // ============================================================
+  function switchMode(mode) {
+    if (cameraActive) stopCamera();
+    currentMode = mode;
+
+    var isCamera = (mode === 'camera');
+    document.getElementById('tabCamera').classList.toggle('active', isCamera);
+    document.getElementById('tabUsb').classList.toggle('active', !isCamera);
+    document.getElementById('btnCameraStart').style.display = isCamera ? '' : 'none';
+    document.getElementById('btnCameraStop').style.display  = 'none';
+
+    if (isCamera) {
+      document.getElementById('qrLabel').textContent  = '📷 下のボタンでカメラを起動';
+      document.getElementById('scanHint').textContent = '📷 カメラボタンをタップしてスキャン開始';
+      document.getElementById('qrSquare').classList.remove('camera-on');
+    } else {
+      document.getElementById('qrLabel').textContent  = '🔌 スキャン待機中…';
+      document.getElementById('scanHint').textContent = '🔌 USBスキャナでQRコードをスキャンしてください';
+      setTimeout(focusBarcodeInput, 100);
+    }
+  }
+
+  // ============================================================
+  // カメラ起動
+  // ============================================================
+  function startCamera() {
+    if (cameraActive) return;
+
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      showToast('❌ このブラウザはカメラに対応していません', 'error');
+      return;
+    }
+
+    navigator.mediaDevices.getUserMedia({
+      video: {
+        facingMode: { ideal: 'environment' },
+        width:  { ideal: 1280 },
+        height: { ideal: 720 }
+      }
+    })
+      .then(function (stream) {
+        cameraStream = stream;
+        cameraActive = true;
+
+        var video = document.getElementById('cameraVideo');
+        video.srcObject = stream;
+        video.style.display = 'block';
+        document.getElementById('scanLine').style.display = 'block';
+        document.getElementById('btnCameraStart').style.display = 'none';
+        document.getElementById('btnCameraStop').style.display  = 'flex';
+        document.getElementById('qrSquare').classList.add('camera-on');
+        document.getElementById('qrLabel').textContent  = '📷 QRコードを枠内に合わせてください';
+        document.getElementById('scanHint').textContent = '🔍 自動認識中…';
+
+        video.onloadedmetadata = function () {
+          video.play().then(scanLoop);
+        };
+      })
+      .catch(function (err) {
+        var msg = 'カメラを起動できませんでした';
+        if (err.name === 'NotAllowedError')   msg = 'カメラのアクセスが拒否されました。ブラウザの設定から許可してください。';
+        if (err.name === 'NotFoundError')     msg = 'カメラが見つかりません。';
+        if (err.name === 'NotSupportedError') msg = 'HTTPS環境が必要です。';
+        showToast('❌ ' + msg, 'error');
+      });
+  }
+
+  // ============================================================
+  // カメラ停止
+  // ============================================================
+  function stopCamera() {
+    if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
+    if (cameraStream) {
+      cameraStream.getTracks().forEach(function (t) { t.stop(); });
+      cameraStream = null;
+    }
+    var video = document.getElementById('cameraVideo');
+    video.srcObject = null;
+    video.style.display = 'none';
+    document.getElementById('scanLine').style.display   = 'none';
+    document.getElementById('btnCameraStart').style.display = (currentMode === 'camera') ? '' : 'none';
+    document.getElementById('btnCameraStop').style.display  = 'none';
+    document.getElementById('qrSquare').classList.remove('camera-on');
+    document.getElementById('qrLabel').textContent  = '📷 下のボタンでカメラを起動';
+    document.getElementById('scanHint').textContent = '📷 カメラボタンをタップしてスキャン開始';
+    cameraActive = false;
+    isScanning   = false;
+  }
+
+  // ============================================================
+  // QR解析ループ（requestAnimationFrame）
+  // ============================================================
+  function scanLoop() {
+    if (!cameraActive) return;
+    var video  = document.getElementById('cameraVideo');
+    var canvas = document.getElementById('qrCanvas');
+
+    if (video.readyState === video.HAVE_ENOUGH_DATA) {
+      canvas.width  = video.videoWidth;
+      canvas.height = video.videoHeight;
+      var ctx = canvas.getContext('2d');
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      var imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      var code = jsQR(imgData.data, imgData.width, imgData.height, {
+        inversionAttempts: 'dontInvert'
+      });
+
+      if (code && !isScanning) {
+        isScanning = true;
+        showScanFlash();
+        stopCamera();
+        processBarcode(code.data);
+        return;
+      }
+    }
+    rafId = requestAnimationFrame(scanLoop);
+  }
+
+  function showScanFlash() {
+    var f = document.getElementById('scanFlash');
+    f.style.opacity = '1';
+    setTimeout(function () { f.style.opacity = '0'; }, 300);
+  }
+
+  // ============================================================
+  // USBスキャナ設定
+  // ============================================================
+  function setupUsbInput() {
+    var el = document.getElementById('barcodeInput');
+
+    function normalize(str) {
+      return str
+        .replace(/[\uFF01-\uFF5E]/g, function (c) {
+          return String.fromCharCode(c.charCodeAt(0) - 0xFEE0);
+        })
+        .replace(/\u3000/g, ' ');
+    }
+
+    el.addEventListener('keydown', function (e) {
+      if (e.key !== 'Enter') return;
+      e.preventDefault();
+      if (isScanning) return;
+      var val = normalize(el.value).trim();
+      if (!val) return;
+      isScanning = true;
+      el.value = '';
+      processBarcode(val);
+      setTimeout(function () { isScanning = false; }, 1000);
+    });
+  }
+
+  function focusBarcodeInput() {
+    var el = document.getElementById('barcodeInput');
+    el.blur();
+    setTimeout(function () { el.focus(); }, 50);
+  }
+
+  // ============================================================
+  // QR文字列パース  形式: 図番[,品名[,サイズ]]
+  // ============================================================
+  function parseQR(raw) {
+    var parts = raw.split(',').map(function (s) { return s.trim(); });
+    return { zuno: parts[0] || '', hinmei: parts[1] || '', size: parts[2] || '' };
+  }
+
+  // ============================================================
+  // バーコード処理（カメラ・USB共通）
+  // ============================================================
+  function processBarcode(raw) {
+    var qr = parseQR(raw);
+    if (!qr.zuno) {
+      showToast('❌ 図番が読み取れませんでした', 'error');
+      isScanning = false;
+      return;
+    }
+
+    showLoading(true);
+
+    callGAS('lookup', { barcode: qr.zuno })
+      .then(function (result) {
+        showLoading(false);
+        isScanning = false;
+        if (result.success) {
+          if (qr.hinmei) result.hinmei = qr.hinmei;
+          if (qr.size)   result.size   = qr.size;
+          setItemInfo(result);
+          updateRegisterBtn();
+        } else {
+          showToast('❌ ' + result.message, 'error');
+        }
+      })
+      .catch(function () {
+        showLoading(false);
+        isScanning = false;
+        showToast('❌ 通信エラー。GAS URLを確認してください', 'error');
+      });
+  }
+
+  // ============================================================
+  // 図番情報をUIに反映
+  // ============================================================
+  function setItemInfo(result) {
+    function setField(id, val, cls) {
+      var el = document.getElementById(id);
+      el.textContent = val;
+      el.className = 'field-value' + (cls ? ' ' + cls : '');
+    }
+    var isMaster = result.hinmei !== '（マスタ未登録）' && result.hinmei !== '';
+    setField('zunoDisplay',   result.zuno,   'filled');
+    setField('hinmeiDisplay', result.hinmei, isMaster ? 'filled' : 'unmatch');
+    setField('sizeDisplay',   result.size,   isMaster ? 'filled' : 'unmatch');
+
+    showToast(isMaster ? '✅ QRコード読取完了' : '⚠️ 図番マスタ未登録', isMaster ? 'success' : 'error');
+
+    setTimeout(function () {
+      document.getElementById('quantityInput').focus();
+      document.getElementById('quantityInput').select();
+    }, 50);
+  }
+
+  // ============================================================
+  // 登録ボタン有効判定
+  // ============================================================
+  function updateRegisterBtn() {
+    var zuno   = document.getElementById('zunoDisplay').textContent.trim();
+    var qty    = document.getElementById('quantityInput').value.trim();
+    var dept   = document.getElementById('departmentSelect').value;
+    var person = document.getElementById('personnelSelect').value;
+    var itype  = document.getElementById('inventoryTypeSelect').value;
+    document.getElementById('registerBtn').disabled =
+      !(zuno && zuno !== '―' && qty !== '' && Number(qty) >= 0 && dept && person && itype);
+  }
+
+  ['quantityInput','departmentSelect','personnelSelect','inventoryTypeSelect'].forEach(function (id) {
+    document.addEventListener('DOMContentLoaded', function () {
+      var el = document.getElementById(id);
+      if (el) { el.addEventListener('change', updateRegisterBtn); el.addEventListener('input', updateRegisterBtn); }
+    });
+  });
+  document.addEventListener('input', function (e) {
+    if (e.target.id === 'quantityInput') updateRegisterBtn();
+  });
+
+  // ============================================================
+  // 登録処理
+  // ============================================================
+  function registerData() {
+    var now = new Date();
+    var pad = function (n) { return String(n).padStart(2, '0'); };
+
+    var data = {
+      date:          now.getFullYear() + '/' + pad(now.getMonth()+1) + '/' + pad(now.getDate()),
+      time:          pad(now.getHours()) + ':' + pad(now.getMinutes()) + ':' + pad(now.getSeconds()),
+      zuno:          document.getElementById('zunoDisplay').textContent.trim(),
+      hinmei:        document.getElementById('hinmeiDisplay').textContent.trim(),
+      size:          document.getElementById('sizeDisplay').textContent.trim(),
+      quantity:      document.getElementById('quantityInput').value.trim(),
+      department:    document.getElementById('departmentSelect').value,
+      personnel:     document.getElementById('personnelSelect').value,
+      inventoryType: document.getElementById('inventoryTypeSelect').value
+    };
+
+    showLoading(true);
+
+    callGAS('register', data)
+      .then(function (result) {
+        showLoading(false);
+        if (result.success) {
+          showToast((result.updated ? '🔄 ' : '✅ ') + result.message, result.updated ? 'updated' : 'success');
+          resetAll();
+        } else {
+          showToast('❌ ' + result.message, 'error');
+        }
+      })
+      .catch(function () {
+        showLoading(false);
+        showToast('❌ 通信エラー。GAS URLを確認してください', 'error');
+      });
+  }
+
+  // ============================================================
+  // リセット（再スキャン）
+  // ============================================================
+  function resetAll() {
+    if (cameraActive) stopCamera();
+    document.getElementById('barcodeInput').value = '';
+    ['zunoDisplay','hinmeiDisplay','sizeDisplay'].forEach(function (id) {
+      var el = document.getElementById(id);
+      el.textContent = '―';
+      el.className = 'field-value';
+    });
+    document.getElementById('quantityInput').value = '';
+    document.getElementById('departmentSelect').value = '';
+    document.getElementById('personnelSelect').value = '';
+    document.getElementById('inventoryTypeSelect').value = '';
+    document.getElementById('registerBtn').disabled = true;
+    isScanning = false;
+    if (currentMode === 'usb') focusBarcodeInput();
+  }
+
+  // ============================================================
+  // ローディング
+  // ============================================================
+  function showLoading(show) {
+    document.getElementById('loading').classList.toggle('show', show);
+  }
+
+  // ============================================================
+  // トースト通知
+  // ============================================================
+  function showToast(msg, type) {
+    var toast = document.getElementById('toast');
+    toast.textContent = msg;
+    toast.className = 'show ' + (type || 'success');
+    clearTimeout(toast._t);
+    toast._t = setTimeout(function () { toast.className = (type || 'success'); }, 3000);
+  }
+</script>
+</body>
+</html>
